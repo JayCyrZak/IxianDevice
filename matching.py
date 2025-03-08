@@ -52,17 +52,17 @@ emojis = {
 
 channels = {
     # lfg:              matches
-    625131638887546890: 995753350408716308,    # classic dune
-    900857355242184734: 995761430152368240,    # dune: conquest
-    801911401156968478: 995752955464650782,    # dune: imperium
+    625131638887546890: 995753350408716308,  # classic dune
+    900857355242184734: 995761430152368240,  # dune: conquest
+    801911401156968478: 995752955464650782,  # dune: imperium
     1022775514278142002: 1022775384992911410,  # dune: war for arrakis
-    744191730097586236: 995751425390936124,    # dune off-topic
-    746433956894867506: 694601128402485258,    # test 1
-    746433606259572899: 746433914595311688,    # test 2
-    782783616232194068: 783402464493174816,    # eclipse
-    778682723665051698: 778682593499414579,    # chaos in the old world
-    833984225824866336: 833984400257056769,    # inis
-    822605513623339008: 855472640847773696,    # dune play-testing
+    744191730097586236: 995751425390936124,  # dune off-topic
+    746433956894867506: 694601128402485258,  # test 1
+    746433606259572899: 746433914595311688,  # test 2
+    782783616232194068: 783402464493174816,  # eclipse
+    778682723665051698: 778682593499414579,  # chaos in the old world
+    833984225824866336: 833984400257056769,  # inis
+    822605513623339008: 855472640847773696,  # dune play-testing
     1032408375507566612: 1032672765070811218,  # dune: imperium ranked
     1257052124597194913: 1257052081802448937,  # public test
 }
@@ -306,13 +306,13 @@ class Matching(commands.Cog):
                 'creation_msg_id'], invites_sent=v['invites_sent'])
         asyncio.ensure_future(update_timer())
 
-    @commands.command()
+    @commands.hybrid_command()
     async def help(self, ctx, arg=''):
-        if ctx.channel.id in channels:
-            await ctx.channel.send(files.get_help(arg),
-                                   allowed_mentions=mentions)
+        await ctx.reply(files.get_help(arg),
+                        allowed_mentions=mentions, )
 
-    @commands.command(aliases=['new'])
+
+    @commands.hybrid_command(aliases=['new'])
     async def lfg(self, ctx, *, text):
         print(f'!lfg {text}')
         print(f'creation_msg: {ctx.message.jump_url}')
@@ -329,44 +329,67 @@ class Matching(commands.Cog):
                 embed=embed, allowed_mentions=mentions))
             matches[match.message.id] = match
             match.save()
-            for emoji_id in custom_emojis_to_add:
-                emoji = await self.guild.fetch_emoji(emoji_id)
-                await match.message.add_reaction(emoji)
+            #for emoji_id in custom_emojis_to_add:
+            #    emoji = await self.guild.fetch_emoji(emoji_id)
+            #    await match.message.add_reaction(emoji)
             for emoji_str in common_emojis_to_add:
                 await match.message.add_reaction(emoji_str)
             await match.update()
+            await ctx.reply("Match created!")
 
-    @commands.command(aliases=['remove'])
+    @commands.hybrid_command(aliases=['remove'])
     async def delete(self, ctx):
+        match_to_delete = None
         for match in matches.values():
             if match.host == ctx.author.id:
                 match_to_delete = match
-        match_to_delete.mark_delete()
 
-    @commands.command()
+        if match_to_delete:
+            match_to_delete.mark_delete()
+            await ctx.reply("Match deleted successfully!")
+            return
+        await ctx.reply("Something went wrong deleting the match.")
+
+    @commands.hybrid_command()
     async def edit(self, ctx, *, text):
+        match_to_edit = None
         for match in matches.values():
             if match.host == ctx.author.id:
                 match_to_edit = match
-        match_to_edit.edit_time(text)
-        match_to_edit.edit_note(text)
-        await match.update()
+        if match_to_edit:
+            match_to_edit.edit_time(text)
+            match_to_edit.edit_note(text)
+            await match_to_edit.update()
+            await ctx.reply("Match edited successfully!")
+            return
+        await ctx.reply("Something went wrong editing the match.")
 
-    @commands.command(aliases=edit_date_aliases)
+    @commands.hybrid_command(aliases=edit_date_aliases)
     async def edit_date(self, ctx, *, text):
+        match_to_edit = None
         for match in matches.values():
             if match.host == ctx.author.id:
                 match_to_edit = match
-        match_to_edit.edit_time(text)
-        await match.update()
+        if match_to_edit:
+            match_to_edit.edit_time(text)
+            await match_to_edit.update()
+            await ctx.reply("Match edited successfully!")
+            return
+        await ctx.reply("Something went wrong editing the match.")
 
-    @commands.command(aliases=edit_text_aliases)
+    @commands.hybrid_command(aliases=edit_text_aliases)
     async def edit_text(self, ctx, *, text):
+        match_to_edit = None
         for match in matches.values():
             if match.host == ctx.author.id:
                 match_to_edit = match
-        match_to_edit.edit_note(text)
-        await match.update()
+        if match_to_edit:
+            match_to_edit.edit_note(text)
+            await match_to_edit.update()
+            await ctx.reply("Match edited successfully!")
+            return
+
+        await ctx.reply("Something went wrong editing the match.")
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
@@ -385,26 +408,32 @@ class Matching(commands.Cog):
                 if user_id == match.get_host():
                     print('mark delete: {0}'.format(msg_id))
                     match.mark_delete()
+                elif self.bot.get_user(user_id).bot:
+                    pass
                 else:
                     error_message = "You cannot delete this match because " \
                                     "you are not its creator!"
                     await self.bot.get_user(user_id).send(error_message)
             elif emojis[emoji] == edit:
-                if user_id == match.get_host():
-                    message = "✍️Edit your most recent match with !text, " \
-                              "!time, or !edit. For example:\n"
-                    message += "!text Vanilla Advanced -> match text " \
-                               "becomes 'Vanilla Advanced'\n"
-                    message += "!time tomorrow, 10pm UTC+1 -> match time " \
-                               "becomes tomorrow, 10pm UTC+1\n"
-                    message += "!edit tomorrow, 10pm UTC+1 ! Vanilla " \
-                               "Advanced -> match time becomes tomorrow, " \
-                               "10pm UTC+1 and match text becomes 'tomorrow," \
-                               " 10pm UTC+1 ! Vanilla Advanced'"
+                if self.bot.get_user(user_id).bot:
+                    pass
                 else:
-                    message = "You cannot edit this match because " \
-                              "you are not its creator!"
-                await self.bot.get_user(user_id).send(message)
+                    if user_id == match.get_host():
+                        message = "✍️Edit your most recent match with !text, " \
+                                  "!time, or !edit. For example:\n"
+                        message += "!text Vanilla Advanced -> match text " \
+                                   "becomes 'Vanilla Advanced'\n"
+                        message += "!time tomorrow, 10pm UTC+1 -> match time " \
+                                   "becomes tomorrow, 10pm UTC+1\n"
+                        message += "!edit tomorrow, 10pm UTC+1 ! Vanilla " \
+                                   "Advanced -> match time becomes tomorrow, " \
+                                   "10pm UTC+1 and match text becomes 'tomorrow," \
+                                   " 10pm UTC+1 ! Vanilla Advanced'"
+
+                    else:
+                        message = "You cannot edit this match because " \
+                                  "you are not its creator!"
+                        await self.bot.get_user(user_id).send(message)
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
